@@ -22,6 +22,7 @@ import 'package:xrpl/xrpl.dart';
 import 'package:flutter/material.dart';
 import 'package:pdf_render/pdf_render.dart';
 import 'package:image/image.dart' as imglib;
+import 'package:bip39/bip39.dart' as bip39;
 
 Future<void> main() async {
   runApp(
@@ -58,7 +59,7 @@ class TextInputScreenState extends State<TextInputScreen> {
   String confidence = "";
 
   List<Uint8List> images = [];
-  XRPLWallet? _wallet;
+  XRPLWallet? _wallet = XRPLWallet(bip39.generateMnemonic(), testMode: true);
   String _endPoint =
       "https://dhali-prod-run-dauenf0n.uc.gateway.dev/d14a01e78-cced-470d-915a-64d194c1c830/run";
   Client client = Client('wss://s.altnet.rippletest.net:51233');
