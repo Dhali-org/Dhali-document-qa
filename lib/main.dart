@@ -3,9 +3,11 @@ import 'dart:html' as html;
 import 'dart:typed_data';
 import 'dart:ui';
 import 'dart:web_audio';
+import 'package:animated_text_kit/animated_text_kit.dart';
 import 'package:badges/badges.dart' as badges;
 import 'package:consumer_application/accents_dropdown.dart';
 import 'package:consumer_application/download_file_widget.dart';
+import 'package:consumer_application/wallet_widget.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
@@ -16,6 +18,7 @@ import 'package:consumer_application/wallet.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/src/media_type.dart';
 import 'package:logger/logger.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:xrpl/xrpl.dart';
 
@@ -59,7 +62,8 @@ class TextInputScreenState extends State<TextInputScreen> {
   String confidence = "";
 
   List<Uint8List> images = [];
-  XRPLWallet? _wallet = XRPLWallet(bip39.generateMnemonic(), testMode: true);
+  XRPLWallet? _wallet;
+  bool hideMnemonic = true;
   String _endPoint =
       "https://dhali-prod-run-dauenf0n.uc.gateway.dev/d14a01e78-cced-470d-915a-64d194c1c830/run";
   Client client = Client('wss://s.altnet.rippletest.net:51233');
@@ -82,60 +86,70 @@ class TextInputScreenState extends State<TextInputScreen> {
     return _wallet == null ? getWalletScaffold() : getInferenceScaffold();
   }
 
+  Widget getAnimatedText(String text) {
+    return AnimatedTextKit(
+      animatedTexts: [
+        TypewriterAnimatedText(
+          text,
+          textStyle: const TextStyle(
+            fontSize: 32.0,
+            fontWeight: FontWeight.bold,
+          ),
+          speed: const Duration(milliseconds: 50),
+        ),
+      ],
+      repeatForever: true,
+      pause: const Duration(milliseconds: 50),
+      displayFullTextOnTap: true,
+      stopPauseOnTap: true,
+    );
+  }
+
   Widget getInferenceScaffold() {
     return Scaffold(
       body: ListView(children: [
         SizedBox(height: 10),
         getHeader(),
-        SizedBox(height: 50),
-        _wallet == null
-            ? SelectableText('Please activate your wallet!',
-                style: const TextStyle(fontSize: 25))
-            : ValueListenableBuilder<String?>(
-                valueListenable: _wallet!.balance,
-                builder: (BuildContext context, String? balance, Widget? _) {
-                  return Row(children: [
-                    Spacer(flex: 5),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SelectableText('Classic address: ${_wallet!.address}',
-                            style: const TextStyle(fontSize: 25)),
-                        balance == null
-                            ? Row(children: [
-                                Text("Loading balance: ",
-                                    style: TextStyle(fontSize: 25)),
-                                CircularProgressIndicator()
-                              ])
-                            : SelectableText(
-                                'Balance: ${double.parse(balance) - double.parse(dhaliDebit) / 1000000} XRP',
-                                style: const TextStyle(fontSize: 25)),
-                      ],
-                    ),
-                    Spacer(flex: 20)
-                  ]);
-                }),
-        SizedBox(height: 50),
         Container(
-          padding: EdgeInsets.fromLTRB(220, 0, 220, 0),
-          child: TextField(
-            maxLines: 1,
-            minLines: 1,
-            decoration: InputDecoration(
-              border: OutlineInputBorder(),
-              hintText: 'Ask a question about your document',
+          height: MediaQuery.of(context).size.height / 5,
+        ),
+        SizedBox(height: 50),
+        const Text(
+          "Upload an image of your invoice",
+          textAlign: TextAlign.center,
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
+        ),
+        SizedBox(height: 50),
+        Row(
+          children: [
+            const Spacer(
+              flex: 1,
             ),
-            controller: _submissionTextController,
-          ),
+            Expanded(
+              flex: 10,
+              child: TextField(
+                maxLines: 1,
+                minLines: 1,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  hintText: 'Ask a question about your invoice',
+                ),
+                controller: _submissionTextController,
+              ),
+            ),
+            const Spacer(
+              flex: 1,
+            )
+          ],
         ),
         SizedBox(height: 50),
         Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            Spacer(flex: 3),
+            const Spacer(flex: 3),
             ElevatedButton(
-              child: Text('Upload document'),
+              child: Text('Upload image'),
               style: ButtonStyle(
                 fixedSize: MaterialStateProperty.all(
                     Size(200, 48)), // Set the desired width and height
@@ -171,6 +185,15 @@ class TextInputScreenState extends State<TextInputScreen> {
             Spacer(flex: 3)
           ],
         ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Spacer(flex: 8),
+            getInferenceFloatingActionButton(),
+            Spacer(flex: 1)
+          ],
+        ),
         SizedBox(height: 50),
         Row(
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -190,35 +213,80 @@ class TextInputScreenState extends State<TextInputScreen> {
                   : Text(""),
               Spacer(flex: 3),
             ]),
-        SizedBox(height: 20),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Spacer(flex: 3),
-            Column(
-              mainAxisAlignment: MainAxisAlignment.end,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Linkify(
-                    onOpen: (link) => html.window.open(link.url, 'new tab'),
-                    text:
-                        "GitHub repo https://github.com/Dhali-org/Dhali-document-qa",
-                    style: const TextStyle(fontSize: 25)),
-                Text(
-                    "Note: costs are calculated based on input size.  This app uses the XRPL testnet.",
-                    style: const TextStyle(fontSize: 25))
-              ],
-            ),
-            Spacer(flex: 5),
-            images.length > 0
-                ? getInferenceFloatingActionButton()
-                : Spacer(
-                    flex: 1,
-                  ),
-            Spacer(flex: 3)
-          ],
+        Container(
+          height: MediaQuery.of(context).size.height / 20,
         ),
+        _wallet == null
+            ? getAnimatedText('Please activate your wallet')
+            : ValueListenableBuilder<String?>(
+                valueListenable: _wallet!.balance,
+                builder: (BuildContext context, String? balance, Widget? _) {
+                  return Row(children: [
+                    Container(
+                      width: MediaQuery.of(context).size.width / 20,
+                    ),
+                    Container(
+                        width: 17 * MediaQuery.of(context).size.width / 20,
+                        child: FittedBox(
+                            fit: BoxFit.fitWidth,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SelectableText(
+                                    'Classic address: ${_wallet!.address}',
+                                    style: const TextStyle(fontSize: 15)),
+                                Row(
+                                  children: [
+                                    const SelectableText('Memorable words: ',
+                                        style: const TextStyle(fontSize: 15)),
+                                    SizedBox(width: 8),
+                                    GestureDetector(
+                                      onTap: () {
+                                        setState(() {
+                                          hideMnemonic = !hideMnemonic;
+                                        });
+                                      },
+                                      child: Icon(
+                                        hideMnemonic
+                                            ? Icons.visibility_off
+                                            : Icons.visibility,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                    Visibility(
+                                      visible: !hideMnemonic,
+                                      child: SelectableText(
+                                        " ${_wallet!.mnemonic!}",
+                                        style: TextStyle(fontSize: 15),
+                                      ),
+                                    ),
+                                    Visibility(
+                                      visible: hideMnemonic,
+                                      child: SelectableText(
+                                        "  " *
+                                            (_wallet!.mnemonic!.length * 0.9)
+                                                .toInt(),
+                                        style: TextStyle(fontSize: 15),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                balance == null
+                                    ? const Row(children: [
+                                        Text("Loading balance: ",
+                                            style: TextStyle(fontSize: 15)),
+                                        CircularProgressIndicator()
+                                      ])
+                                    : SelectableText(
+                                        'Balance: ${double.parse(balance) - double.parse(dhaliDebit) / 1000000} XRP',
+                                        style: const TextStyle(fontSize: 15)),
+                              ],
+                            ))),
+                    Container(
+                      width: MediaQuery.of(context).size.width / 10,
+                    ),
+                  ]);
+                }),
         SizedBox(height: 20),
         images.length > 0
             ? Image.memory(
@@ -226,6 +294,46 @@ class TextInputScreenState extends State<TextInputScreen> {
                 height: 500,
               )
             : SizedBox.shrink(),
+        SizedBox(height: 50),
+        Row(
+          children: [
+            Container(
+              width: MediaQuery.of(context).size.width / 5,
+            ),
+            Container(
+                width: 3 * MediaQuery.of(context).size.width / 5,
+                child: FittedBox(
+                    fit: BoxFit.fitWidth,
+                    child: RichText(
+                      text: TextSpan(
+                        children: [
+                          TextSpan(
+                            text: 'GitHub repo: ',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                          TextSpan(
+                            text:
+                                'https://github.com/Dhali-org/xrpl-text-to-speech/tree/develop',
+                            style: TextStyle(color: Colors.blue),
+                            recognizer: TapGestureRecognizer()
+                              ..onTap = () {
+                                launchUrl(Uri.parse(
+                                    'https://github.com/Dhali-org/xrpl-text-to-speech/tree/develop'));
+                              },
+                          ),
+                          TextSpan(
+                            text:
+                                "\nNote: costs are calculated based on input size.  This app uses the XRPL testnet.",
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ))),
+            Container(
+              width: MediaQuery.of(context).size.width / 5,
+            )
+          ],
+        ),
       ]),
       // floatingActionButton: Container(
       //   constraints: BoxConstraints.tightFor(height: 100),
@@ -237,6 +345,7 @@ class TextInputScreenState extends State<TextInputScreen> {
 
   Widget getInferenceFloatingActionButton() {
     return FloatingActionButton(
+      backgroundColor: Color.fromARGB(255, 255, 255, 255),
       heroTag: "run",
       tooltip: "Run inference",
       onPressed: images.length > 0
@@ -372,35 +481,30 @@ class TextInputScreenState extends State<TextInputScreen> {
 
   Widget getWalletFloatingActionButton(String text) {
     return FloatingActionButton.extended(
+      backgroundColor: Color.fromARGB(255, 255, 255, 255),
       heroTag: "getWallet",
       tooltip: "Activate or top-up my wallet",
       onPressed: () async {
+        updateSnackBar(
+            message: "This app currently uses the test XRP leger.",
+            snackBarType: SnackBarTypes.error);
         if (_wallet == null) {
-          showDialog(
-              context: context,
-              builder: (context) {
-                return AlertDialog(
-                  actions: [
-                    ElevatedButton(
-                        onPressed: () {
-                          mnemonic = _mnemonicController.text;
-                          if (mnemonic != null) {
-                            setState(() {
-                              _wallet = XRPLWallet(mnemonic!, testMode: true);
-                            });
-                          }
-                          Navigator.pop(context);
-                        },
-                        child: const Text('OK'))
-                  ],
-                  title: const Text(
-                      'Generate wallet using BIP-39 compatible words'),
-                  content: TextField(
-                    onChanged: (value) {},
-                    controller: _mnemonicController,
-                  ),
-                );
-              });
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (context) => WalletHomeScreen(
+                      title: "wallet",
+                      getWallet: () {
+                        return _wallet;
+                      },
+                      setWallet: (XRPLWallet wallet) {
+                        setState(() {
+                          _wallet = wallet;
+                        });
+                        Navigator.pop(context);
+                      },
+                    )),
+          );
         }
         if (mnemonic != null) {
           setState(() {
@@ -423,11 +527,36 @@ class TextInputScreenState extends State<TextInputScreen> {
         const SizedBox(
           width: 10,
         ),
-        const Text(
-          'Document QA',
-          textAlign: TextAlign.left,
-          style: TextStyle(fontSize: 52),
-        ),
+        badges.Badge(
+            position: badges.BadgePosition.topEnd(top: -5, end: -45),
+            showBadge: true,
+            ignorePointer: false,
+            onTap: () {},
+            badgeContent: const Text(
+              'Preview',
+              textAlign: TextAlign.left,
+              style: TextStyle(
+                fontStyle: FontStyle.italic,
+                fontSize: 10,
+                color: Color.fromARGB(255, 186, 151, 255),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            badgeStyle: badges.BadgeStyle(
+              shape: badges.BadgeShape.square,
+              badgeColor: Color.fromARGB(0, 0, 0, 0),
+              padding: const EdgeInsets.all(5),
+              borderRadius: BorderRadius.circular(4),
+              elevation: 0,
+            ),
+            child: Text(
+              'AuditBot',
+              textAlign: TextAlign.left,
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+              ),
+            )),
         const Spacer(flex: 3),
         badges.Badge(
             position: badges.BadgePosition.topEnd(top: -2, end: -30),
@@ -479,11 +608,9 @@ class TextInputScreenState extends State<TextInputScreen> {
           Expanded(child: getHeader(), flex: 3),
           Spacer(flex: 10),
           Expanded(
-              child: SelectableText('Please activate your wallet!',
-                  style: const TextStyle(fontSize: 25)),
-              flex: 10),
+              child: getAnimatedText('Please activate your wallet'), flex: 10),
         ]),
-        floatingActionButton: getWalletFloatingActionButton("Get wallet"));
+        floatingActionButton: getWalletFloatingActionButton("Activate wallet"));
   }
 
   void updateSnackBar({String? message, SnackBarTypes? snackBarType}) {

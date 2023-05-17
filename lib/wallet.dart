@@ -37,11 +37,13 @@ class XRPLWallet {
   String _netUrl = uninitialisedUrl;
 
   Wallet? _wallet;
+  String? mnemonic;
 
   ValueNotifier<String?> balance = ValueNotifier(null);
 
   XRPLWallet(String seed, {bool testMode = false, fundingAmount = "40"}) {
     _netUrl = testMode ? testNetUrl : mainnetUrl;
+    mnemonic = seed;
 
     var walletFromMneomicOptions = WalletFromMnemonicOptions(
       mnemonicEncoding: "bip39",
