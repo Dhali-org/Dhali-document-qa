@@ -313,12 +313,12 @@ class TextInputScreenState extends State<TextInputScreen> {
                           ),
                           TextSpan(
                             text:
-                                'https://github.com/Dhali-org/xrpl-text-to-speech/tree/develop',
+                                'https://github.com/Dhali-org/Dhali-document-qa',
                             style: TextStyle(color: Colors.blue),
                             recognizer: TapGestureRecognizer()
                               ..onTap = () {
                                 launchUrl(Uri.parse(
-                                    'https://github.com/Dhali-org/xrpl-text-to-speech/tree/develop'));
+                                    'https://github.com/Dhali-org/Dhali-document-qa'));
                               },
                           ),
                           TextSpan(
