@@ -196,22 +196,28 @@ class TextInputScreenState extends State<TextInputScreen> {
         ),
         SizedBox(height: 50),
         Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisAlignment: MainAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Spacer(flex: 3),
+              Spacer(flex: 1),
               answer != ""
-                  ? Container(
-                      margin: const EdgeInsets.all(15.0),
-                      padding: const EdgeInsets.all(10.0),
-                      decoration: BoxDecoration(
-                          border: Border.all(color: Colors.green)),
-                      child: Text(
-                          "Answer: ${answer}, Confidence: ${confidence}",
-                          style: const TextStyle(fontSize: 25)),
-                    )
+                  ? Expanded(
+                      flex: 10,
+                      // Then wrap your text widget with expanded
+                      child: Container(
+                        margin: const EdgeInsets.all(15.0),
+                        padding: const EdgeInsets.all(10.0),
+                        width: MediaQuery.of(context).size.width / 20,
+                        decoration: BoxDecoration(
+                            borderRadius: BorderRadius.all(Radius.circular(8)),
+                            border: Border.all(color: Colors.green, width: 3)),
+                        child: Text(
+                            "Answer: ${answer}\n\nConfidence: ${double.parse(confidence).round() * 100}%",
+                            softWrap: true,
+                            style: const TextStyle(fontSize: 15)),
+                      ))
                   : Text(""),
-              Spacer(flex: 3),
+              Spacer(flex: 1),
             ]),
         Container(
           height: MediaQuery.of(context).size.height / 20,
