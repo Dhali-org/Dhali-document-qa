@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:html' as html;
+import 'dart:js' as js;
 import 'dart:typed_data';
 import 'dart:ui';
 import 'dart:web_audio';
@@ -128,6 +129,12 @@ class TextInputScreenState extends State<TextInputScreen> {
                 Navigator.pop(context);
               },
             ),
+            ListTile(
+                leading: const Icon(Icons.cookie),
+                title: const Text('Cookie Consent Preferences'),
+                onTap: () {
+                  js.context.callMethod('displayPreferenceModal');
+                }),
           ],
         ),
       ),
