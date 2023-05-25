@@ -85,6 +85,8 @@ class TextInputScreenState extends State<TextInputScreen> {
       "https://dhali-prod-run-dauenf0n.uc.gateway.dev/d14a01e78-cced-470d-915a-64d194c1c830/run";
   Client client = Client('wss://s.altnet.rippletest.net:51233');
   ValueNotifier<String?> balance = ValueNotifier(null);
+  bool _showContinueButton = false;
+
   void initState() {
     super.initState();
   }
@@ -657,6 +659,24 @@ class TextInputScreenState extends State<TextInputScreen> {
     ScaffoldMessenger.of(context).showSnackBar(snackbar);
   }
 
+  void activateWallet() {
+    setState(() {
+      _showContinueButton = true;
+    });
+  }
+
+  void switchToProductView() {
+    setState(() {
+      this.drawerIndex = DrawerIndex.Product;
+      if (_wallet != null) {
+        screenView = getInferenceScaffoldBody();
+      } else {
+        screenView = null;
+      }
+      _showContinueButton = false;
+    });
+  }
+
   Widget? getScreenView(drawerIndex) {
     Future(() => ScaffoldMessenger.of(context).hideCurrentSnackBar());
 
@@ -673,28 +693,41 @@ class TextInputScreenState extends State<TextInputScreen> {
           );
 
           Future(() => ScaffoldMessenger.of(context).showSnackBar(snackbar));
-          screenView = WalletHomeScreen(
-            title: "wallet",
-            buttonsColor: Colors.blue,
-            bodyTextColor: Colors.white,
-            getWallet: () {
-              return _wallet;
-            },
-            setWallet: (DhaliWallet wallet) {
-              _wallet = wallet;
-            },
+
+          screenView = Scaffold(
+            body: Stack(
+              children: [
+                WalletHomeScreen(
+                  title: "wallet",
+                  buttonsColor: Colors.blue,
+                  bodyTextColor: Colors.white,
+                  getWallet: () {
+                    return _wallet;
+                  },
+                  setWallet: (DhaliWallet wallet) {
+                    _wallet = wallet;
+                  },
+                  onActivation: activateWallet,
+                ),
+                if (_showContinueButton)
+                  Positioned(
+                    bottom: 100,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: FloatingActionButton.extended(
+                        label: Text('Continue'),
+                        onPressed: switchToProductView,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           );
         });
         break;
       case DrawerIndex.Product:
-        setState(() {
-          this.drawerIndex = drawerIndex;
-          if (_wallet != null) {
-            screenView = getInferenceScaffoldBody();
-          } else {
-            screenView = null;
-          }
-        });
+        switchToProductView();
         break;
       default:
         break;
