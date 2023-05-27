@@ -16,9 +16,10 @@ jobs:
           channel: 'stable'
       - run: |
           mv firebase{.prod,}.json
-          flutter build web --profile --dart-define=Dart2jsOptimization=O0 --dart-define=DEPLOYMENT_ENVIRONMENT=staging
+          flutter build web --release      
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
           firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_DHALI_PROD }}'
+          channelId: live
           projectId: dhali-prod
