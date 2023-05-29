@@ -6,10 +6,13 @@ import 'dart:ui';
 import 'dart:web_audio';
 import 'package:animated_text_kit/animated_text_kit.dart';
 import 'package:badges/badges.dart' as badges;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:consumer_application/accents_dropdown.dart';
 import 'package:consumer_application/download_file_widget.dart';
 import 'package:consumer_application/sentence_list_widget.dart';
 import 'package:dhali_wallet/dhali_wallet_widget.dart';
+import 'firebase_options.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
@@ -36,10 +39,15 @@ enum DrawerIndex {
 }
 
 Future<void> main() async {
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(
     MaterialApp(
       theme: ThemeData.dark(),
-      home: TextInputScreen(),
+      home: TextInputScreen(
+        getFirestore: () => FirebaseFirestore.instance,
+      ),
     ),
   );
 }
@@ -59,6 +67,10 @@ const Map<String, int> accents = {
 };
 
 class TextInputScreen extends StatefulWidget {
+  const TextInputScreen({Key? key, required this.getFirestore})
+      : super(key: key);
+
+  final FirebaseFirestore Function() getFirestore;
   @override
   TextInputScreenState createState() => TextInputScreenState();
 }
@@ -69,6 +81,7 @@ class TextInputScreenState extends State<TextInputScreen> {
     Pair("What is the total cost?", true),
     Pair("What is the reference number?", true)
   ];
+  static const String uuid = 'd14a01e78-cced-470d-915a-64d194c1c830';
   String dhaliDebit = "0";
   double progress = 0;
   String answer = "";
@@ -77,12 +90,13 @@ class TextInputScreenState extends State<TextInputScreen> {
   bool complete = false;
   Widget? screenView;
   DrawerIndex? drawerIndex;
+  double? _costPerRun;
 
   List<PlatformFile> images = [];
   DhaliWallet? _wallet;
   bool hideMnemonic = true;
-  String _endPoint =
-      "https://dhali-prod-run-dauenf0n.uc.gateway.dev/d14a01e78-cced-470d-915a-64d194c1c830/run";
+  final String _endPoint =
+      "https://dhali-prod-run-dauenf0n.uc.gateway.dev/${uuid}/run";
   Client client = Client('wss://s.altnet.rippletest.net:51233');
   ValueNotifier<String?> balance = ValueNotifier(null);
   bool _showContinueButton = false;
@@ -302,6 +316,126 @@ class TextInputScreenState extends State<TextInputScreen> {
           ),
         ],
       ),
+      SizedBox(height: 20),
+      Row(children: [
+        const Spacer(
+          flex: 1,
+        ),
+        Center(
+            child: Table(
+          defaultColumnWidth: IntrinsicColumnWidth(),
+          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+          children: [
+            TableRow(
+              children: [
+                TableCell(
+                  child: Container(
+                    margin: EdgeInsets.all(8),
+                    child: Text('Expected cost per request:',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                TableCell(
+                    child: FutureBuilder(
+                        future: widget
+                            .getFirestore()
+                            .collection("public_minted_nfts")
+                            .doc(uuid)
+                            .get(),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return CircularProgressIndicator();
+                          } else if (snapshot.hasData &&
+                              snapshot.data!.data() != null) {
+                            // TODO: https://github.com/orgs/Dhali-org/projects/1/views/1?pane=issue&itemId=29307943
+                            _costPerRun =
+                                snapshot.data!.data()!["cost_per_ms"] as double;
+                            return Center(
+                                child: Text(
+                                    "${(_costPerRun! / 1000000).toStringAsFixed(3)} XRP",
+                                    style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold)));
+                          }
+                          return const Text("unknown");
+                        })),
+                TableCell(
+                    child: IconButton(
+                        icon: Icon(Icons.info),
+                        onPressed: () {
+                          showDialog(
+                              context: context,
+                              builder: (context) {
+                                return AlertDialog(
+                                  title: const Text('Information'),
+                                  content: const Text(
+                                      'The number of requests is equal to the '
+                                      'number of images multiplied by the number '
+                                      'of questions.'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () {
+                                        Navigator.pop(context);
+                                      },
+                                      child: const Text("OK"),
+                                    ),
+                                  ],
+                                );
+                              });
+                        }))
+              ],
+            ),
+            TableRow(
+              children: [
+                TableCell(
+                  child: Container(
+                    margin: EdgeInsets.all(8),
+                    child: Text('Expected total:',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                TableCell(
+                    child: FutureBuilder(
+                        future: widget
+                            .getFirestore()
+                            .collection("public_minted_nfts")
+                            .doc(uuid)
+                            .get(),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return CircularProgressIndicator();
+                          } else if (snapshot.hasData &&
+                              snapshot.data!.data() != null) {
+                            // TODO: https://github.com/orgs/Dhali-org/projects/1/views/1?pane=issue&itemId=29307943
+                            _costPerRun =
+                                snapshot.data!.data()!["cost_per_ms"] as double;
+                            return Center(
+                                child: Text(
+                                    (images.length *
+                                                sentences.length *
+                                                _costPerRun! /
+                                                1000000)
+                                            .toStringAsFixed(3) +
+                                        " XRP",
+                                    style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold)));
+                          }
+                          return const Text("unknown");
+                        })),
+                TableCell(child: SizedBox.shrink())
+              ],
+            )
+          ],
+        )),
+        const Spacer(
+          flex: 6,
+        ),
+      ]),
       SizedBox(height: 50),
       Row(
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -378,7 +512,8 @@ class TextInputScreenState extends State<TextInputScreen> {
                     snackBarType: SnackBarTypes.error);
                 return;
               }
-              final dataUri = 'data:text/plain;charset=utf-8,$outputCsv';
+              String encodedCsv = Uri.encodeComponent(outputCsv);
+              final dataUri = 'data:text/plain;charset=utf-8,$encodedCsv';
               html.document.createElement('a') as html.AnchorElement
                 ..href = dataUri
                 ..download = 'results.csv'
@@ -405,6 +540,13 @@ class TextInputScreenState extends State<TextInputScreen> {
               snackBarType: SnackBarTypes.error);
           return;
         }
+        if (_wallet!.balance.value == null) {
+          updateSnackBar(
+              message:
+                  "Your wallet's balance is updating. Please wait a moment",
+              snackBarType: SnackBarTypes.error);
+          return;
+        }
         if (images.length == 0) {
           updateSnackBar(
               message: "Please select your images",
@@ -428,6 +570,7 @@ class TextInputScreenState extends State<TextInputScreen> {
         for (var image in images) {
           outputCsv += "${image.name}, ";
           for (var question in sentences) {
+            var logger = Logger();
             try {
               if (question.string == "" || question.flag == false) {
                 continue;
@@ -462,7 +605,6 @@ class TextInputScreenState extends State<TextInputScreen> {
                   http.MultipartRequest("PUT", Uri.parse(entryPointUrlRoot));
               request.headers.addAll(header);
 
-              var logger = Logger();
               var input =
                   '{"image": "${base64Encode(image.bytes!)}", "question": "${question.string}"}';
               request.files.add(http.MultipartFile(
@@ -486,18 +628,25 @@ class TextInputScreenState extends State<TextInputScreen> {
               var response =
                   json.decode(await finalResponse.stream.bytesToString());
               if (finalResponse.statusCode == 200) {
-                print(response["results"]);
-                outputCsv += (response["results"][0]["answer"] + ", ");
-                outputCsv +=
-                    ((response["results"][0]["score"] as double).toString() +
-                        ", ");
+                String answer = (response["results"][0]["answer"] as String);
+                double confidence = (response["results"][0]["score"] as double);
+
+                answer = answer.replaceAll(",", ";");
+
+                logger.d("Answer", answer);
+                logger.d("Confidence", confidence);
+
+                outputCsv += ("$answer, ");
+                outputCsv += ("$confidence, ");
               } else {
+                logger.d("Response code", finalResponse.statusCode);
                 updateSnackBar(
                     message: response.toString(),
                     snackBarType: SnackBarTypes.error);
                 outputCsv += ("ERROR, 0, ");
               }
             } catch (e) {
+              logger.d("Error", e.toString());
               outputCsv += ("ERROR, 0, ");
             }
             setState(() {
