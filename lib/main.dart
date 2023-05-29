@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:html' as html;
+import 'dart:js' as js;
 import 'dart:typed_data';
 import 'dart:ui';
 import 'dart:web_audio';
@@ -7,14 +8,16 @@ import 'package:animated_text_kit/animated_text_kit.dart';
 import 'package:badges/badges.dart' as badges;
 import 'package:consumer_application/accents_dropdown.dart';
 import 'package:consumer_application/download_file_widget.dart';
-import 'package:consumer_application/wallet_widget.dart';
+import 'package:consumer_application/sentence_list_widget.dart';
+import 'package:dhali_wallet/dhali_wallet_widget.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
+import 'package:flutter_svg/svg.dart';
 import 'package:url_launcher/url_launcher.dart' as launcher;
 
 import 'dart:convert';
-import 'package:consumer_application/wallet.dart';
+import 'package:dhali_wallet/dhali_wallet.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/src/media_type.dart';
 import 'package:logger/logger.dart';
@@ -26,6 +29,11 @@ import 'package:flutter/material.dart';
 import 'package:pdf_render/pdf_render.dart';
 import 'package:image/image.dart' as imglib;
 import 'package:bip39/bip39.dart' as bip39;
+
+enum DrawerIndex {
+  Wallet,
+  Product,
+}
 
 Future<void> main() async {
   runApp(
@@ -56,22 +64,29 @@ class TextInputScreen extends StatefulWidget {
 }
 
 class TextInputScreenState extends State<TextInputScreen> {
+  List<Pair<String, bool>> sentences = [
+    Pair("What is the title?", true),
+    Pair("What is the total cost?", true),
+    Pair("What is the reference number?", true)
+  ];
   String dhaliDebit = "0";
-  int selectedAccentInt = 7361;
+  double progress = 0;
   String answer = "";
   String confidence = "";
+  String outputCsv = "";
+  bool complete = false;
+  Widget? screenView;
+  DrawerIndex? drawerIndex;
 
-  List<Uint8List> images = [];
-  XRPLWallet? _wallet;
+  List<PlatformFile> images = [];
+  DhaliWallet? _wallet;
   bool hideMnemonic = true;
   String _endPoint =
       "https://dhali-prod-run-dauenf0n.uc.gateway.dev/d14a01e78-cced-470d-915a-64d194c1c830/run";
   Client client = Client('wss://s.altnet.rippletest.net:51233');
   ValueNotifier<String?> balance = ValueNotifier(null);
-  String? mnemonic;
-  final TextEditingController _mnemonicController = TextEditingController();
-  final TextEditingController _submissionTextController =
-      TextEditingController();
+  bool _showContinueButton = false;
+
   void initState() {
     super.initState();
   }
@@ -83,7 +98,61 @@ class TextInputScreenState extends State<TextInputScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return _wallet == null ? getWalletScaffold() : getInferenceScaffold();
+    return Scaffold(
+      appBar: AppBar(),
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: <Widget>[
+            DrawerHeader(
+              decoration: BoxDecoration(),
+              child: Container(
+                height: 100, // Or any other height that suits your design
+                child: SvgPicture.asset(
+                    'assets/images/blue-company-logo-clean.svg',
+                    semanticsLabel: 'Acme Logo'),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.wallet),
+              title: const Text('Wallet'),
+              onTap: () {
+                setState(() {
+                  drawerIndex = DrawerIndex.Wallet;
+                  screenView = getScreenView(drawerIndex);
+                });
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.token),
+              title: const Text('AuditBot'),
+              onTap: () {
+                setState(() {
+                  drawerIndex = DrawerIndex.Product;
+                  screenView = getScreenView(drawerIndex);
+                });
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+                leading: const Icon(Icons.cookie),
+                title: const Text('Cookie Consent Preferences'),
+                onTap: () {
+                  js.context.callMethod('displayPreferenceModal');
+                }),
+          ],
+        ),
+      ),
+      body: screenView == null
+          ? getWalletScaffoldBody()
+          : getScreenView(drawerIndex),
+      floatingActionButton: screenView == null
+          ? getWalletFloatingActionButton("Activate wallet")
+          : null,
+      floatingActionButtonLocation:
+          screenView == null ? FloatingActionButtonLocation.centerFloat : null,
+    );
   }
 
   Widget getAnimatedText(String text) {
@@ -105,372 +174,345 @@ class TextInputScreenState extends State<TextInputScreen> {
     );
   }
 
-  Widget getInferenceScaffold() {
-    return Scaffold(
-      body: ListView(children: [
-        SizedBox(height: 10),
-        getHeader(),
-        Container(
-          height: MediaQuery.of(context).size.height / 5,
-        ),
-        SizedBox(height: 50),
-        const Text(
-          "Upload an image of your invoice",
-          textAlign: TextAlign.center,
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
-        ),
-        SizedBox(height: 50),
-        Row(
-          children: [
-            const Spacer(
-              flex: 1,
-            ),
-            Expanded(
-              flex: 10,
-              child: TextField(
-                maxLines: 1,
-                minLines: 1,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  hintText: 'Ask a question about your invoice',
-                ),
-                controller: _submissionTextController,
-              ),
-            ),
-            const Spacer(
-              flex: 1,
-            )
-          ],
-        ),
-        SizedBox(height: 50),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            const Spacer(flex: 3),
-            ElevatedButton(
-              child: Text('Upload image'),
-              style: ButtonStyle(
-                fixedSize: MaterialStateProperty.all(
-                    Size(200, 48)), // Set the desired width and height
-              ),
-              onPressed: () async {
-                var picked = await FilePicker.platform.pickFiles(
-                    type: FileType.custom, allowedExtensions: ["png"]);
+  Widget getInferenceScaffoldBody() {
+    return ListView(children: [
+      SizedBox(height: 10),
+      getHeader(),
+      Container(
+        height: MediaQuery.of(context).size.height / 10,
+      ),
+      Row(
+        children: [
+          Container(
+            width: MediaQuery.of(context).size.width / 10,
+          ),
+          const Text(
+            "1. Upload your invoice images",
+            textAlign: TextAlign.left,
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
+          ),
+        ],
+      ),
+      SizedBox(height: 50),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          const Spacer(flex: 3),
+          ElevatedButton(
+            style: ButtonStyle(
+                backgroundColor:
+                    MaterialStateProperty.all<Color>(Colors.tealAccent),
+                fixedSize: MaterialStateProperty.all(Size(200,
+                    48)), // Set the desired width and heightshape: MaterialStateProperty.all<RoundedRectangleBorder>(
+                shape: MaterialStateProperty.all<RoundedRectangleBorder>(
+                    RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(
+                      25), // Adjust the radius value as needed
+                ))),
+            onPressed: () async {
+              var picked = await FilePicker.platform.pickFiles(
+                  type: FileType.custom,
+                  allowedExtensions: ["png"],
+                  allowMultiple: true);
+              if (picked != null) {
+                images = [];
+                answer = "";
+                confidence = "";
+                setState(() {
+                  images = picked.files;
+                });
+                // TODO : Consider allowing PDFs to be uploaded
+                // final doc = await PdfDocument.openData(
+                //     picked.files.first.bytes!);
+                // final pages = doc.pageCount;
 
-                if (picked != null) {
-                  images = [];
-                  answer = "";
-                  confidence = "";
-                  setState(() {
-                    images.add(picked.files.first.bytes!);
-                  });
-                  // TODO : Consider allowing PDFs to be uploaded
-                  // final doc = await PdfDocument.openData(
-                  //     picked.files.first.bytes!);
-                  // final pages = doc.pageCount;
-
-                  // // get images from all the pages
-                  // for (int i = 1; i <= pages; i++) {
-                  //   var page = await doc.getPage(i);
-                  //   var imgPDF = await page.render();
-                  //   var img = await imgPDF.createImageDetached();
-                  //   var bytes = await img.toByteData(
-                  //       format: ImageByteFormat.png);
-                  //   images.add(bytes!);
-                  // }
-                }
-              },
+                // // get images from all the pages
+                // for (int i = 1; i <= pages; i++) {
+                //   var page = await doc.getPage(i);
+                //   var imgPDF = await page.render();
+                //   var img = await imgPDF.createImageDetached();
+                //   var bytes = await img.toByteData(
+                //       format: ImageByteFormat.png);
+                //   images.add(bytes!);
+                // }
+              }
+            },
+            child: Text(
+              'Select images',
+              style: TextStyle(color: Colors.black),
             ),
-            Spacer(flex: 3)
-          ],
-        ),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Spacer(flex: 8),
-            getInferenceFloatingActionButton(),
-            Spacer(flex: 1)
-          ],
-        ),
-        SizedBox(height: 50),
-        Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Spacer(flex: 3),
-              answer != ""
-                  ? Container(
-                      margin: const EdgeInsets.all(15.0),
-                      padding: const EdgeInsets.all(10.0),
-                      decoration: BoxDecoration(
-                          border: Border.all(color: Colors.green)),
-                      child: Text(
-                          "Answer: ${answer}, Confidence: ${confidence}",
-                          style: const TextStyle(fontSize: 25)),
-                    )
-                  : Text(""),
-              Spacer(flex: 3),
-            ]),
-        Container(
-          height: MediaQuery.of(context).size.height / 20,
-        ),
-        _wallet == null
-            ? getAnimatedText('Please activate your wallet')
-            : ValueListenableBuilder<String?>(
-                valueListenable: _wallet!.balance,
-                builder: (BuildContext context, String? balance, Widget? _) {
-                  return Row(children: [
-                    Container(
-                      width: MediaQuery.of(context).size.width / 20,
-                    ),
-                    Container(
-                        width: 17 * MediaQuery.of(context).size.width / 20,
-                        child: FittedBox(
-                            fit: BoxFit.fitWidth,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                SelectableText(
-                                    'Classic address: ${_wallet!.address}',
-                                    style: const TextStyle(fontSize: 15)),
-                                Row(
-                                  children: [
-                                    const SelectableText('Memorable words: ',
-                                        style: const TextStyle(fontSize: 15)),
-                                    SizedBox(width: 8),
-                                    GestureDetector(
-                                      onTap: () {
-                                        setState(() {
-                                          hideMnemonic = !hideMnemonic;
-                                        });
-                                      },
-                                      child: Icon(
-                                        hideMnemonic
-                                            ? Icons.visibility_off
-                                            : Icons.visibility,
-                                        color: Colors.grey,
-                                      ),
-                                    ),
-                                    Visibility(
-                                      visible: !hideMnemonic,
-                                      child: SelectableText(
-                                        " ${_wallet!.mnemonic!}",
-                                        style: TextStyle(fontSize: 15),
-                                      ),
-                                    ),
-                                    Visibility(
-                                      visible: hideMnemonic,
-                                      child: SelectableText(
-                                        "  " *
-                                            (_wallet!.mnemonic!.length * 0.9)
-                                                .toInt(),
-                                        style: TextStyle(fontSize: 15),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                balance == null
-                                    ? const Row(children: [
-                                        Text("Loading balance: ",
-                                            style: TextStyle(fontSize: 15)),
-                                        CircularProgressIndicator()
-                                      ])
-                                    : SelectableText(
-                                        'Balance: ${double.parse(balance) - double.parse(dhaliDebit) / 1000000} XRP',
-                                        style: const TextStyle(fontSize: 15)),
-                              ],
-                            ))),
-                    Container(
-                      width: MediaQuery.of(context).size.width / 10,
-                    ),
-                  ]);
-                }),
-        SizedBox(height: 20),
-        images.length > 0
-            ? Image.memory(
-                images[0],
-                height: 500,
-              )
-            : SizedBox.shrink(),
-        SizedBox(height: 50),
-        Row(
-          children: [
-            Container(
-              width: MediaQuery.of(context).size.width / 5,
-            ),
-            Container(
-                width: 3 * MediaQuery.of(context).size.width / 5,
-                child: FittedBox(
-                    fit: BoxFit.fitWidth,
-                    child: RichText(
-                      text: TextSpan(
-                        children: [
-                          TextSpan(
-                            text: 'GitHub repo: ',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                          TextSpan(
-                            text:
-                                'https://github.com/Dhali-org/xrpl-text-to-speech/tree/develop',
-                            style: TextStyle(color: Colors.blue),
-                            recognizer: TapGestureRecognizer()
-                              ..onTap = () {
-                                launchUrl(Uri.parse(
-                                    'https://github.com/Dhali-org/xrpl-text-to-speech/tree/develop'));
-                              },
-                          ),
-                          TextSpan(
-                            text:
-                                "\nNote: costs are calculated based on input size.  This app uses the XRPL testnet.",
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ],
-                      ),
-                    ))),
-            Container(
-              width: MediaQuery.of(context).size.width / 5,
+          ),
+          Spacer(flex: 3)
+        ],
+      ),
+      images.length > 0
+          ? Center(
+              child: Text(
+                "\n\n${images.length} images selected",
+                style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green),
+              ),
             )
+          : SizedBox.shrink(),
+      SizedBox(height: 50),
+      Row(
+        children: [
+          Container(
+            width: MediaQuery.of(context).size.width / 10,
+          ),
+          const Text(
+            "2. Choose your questions",
+            textAlign: TextAlign.left,
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
+          ),
+        ],
+      ),
+      SizedBox(height: 50),
+      Row(
+        children: [
+          const Spacer(
+            flex: 1,
+          ),
+          SentenceListWidget(
+            getSentences: () => sentences,
+            setSentences: (updatedSentences) {
+              setState(() {
+                updatedSentences = sentences;
+              });
+            },
+          ),
+          const Spacer(
+            flex: 1,
+          )
+        ],
+      ),
+      SizedBox(height: 50),
+      Row(
+        children: [
+          Container(
+            width: MediaQuery.of(context).size.width / 10,
+          ),
+          const Text(
+            "3. Run",
+            textAlign: TextAlign.center,
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
+          ),
+        ],
+      ),
+      SizedBox(height: 50),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Spacer(flex: 2),
+          getDownloadFloatingActionButton(),
+          Spacer(flex: 2),
+          getInferenceFloatingActionButton(),
+          Spacer(flex: 2)
+        ],
+      ),
+      SizedBox(height: 20),
+      images.length * sentences.length != 0 && progress != 0
+          ? Row(children: [
+              Spacer(flex: 2),
+              Expanded(
+                  flex: 8,
+                  child: LinearProgressIndicator(
+                      color: Colors.green,
+                      value: progress / (images.length * sentences.length))),
+              Spacer(flex: 2),
+            ])
+          : const SizedBox.shrink(),
+      Container(
+        height: MediaQuery.of(context).size.height / 20,
+      ),
+      SizedBox(height: 50),
+      RichText(
+        textAlign: TextAlign.center,
+        text: TextSpan(
+          children: [
+            TextSpan(
+              text: 'GitHub repo: ',
+              style: TextStyle(color: Colors.white),
+            ),
+            TextSpan(
+              text: 'https://github.com/Dhali-org/Dhali-document-qa',
+              style: TextStyle(color: Colors.blue),
+              recognizer: TapGestureRecognizer()
+                ..onTap = () {
+                  launchUrl(Uri.parse(
+                      'https://github.com/Dhali-org/Dhali-document-qa'));
+                },
+            ),
+            TextSpan(
+              text:
+                  "\nNote: costs are calculated based on input size.  This app uses the XRPL testnet.",
+              style: TextStyle(color: Colors.white),
+            ),
           ],
         ),
-      ]),
-      // floatingActionButton: Container(
-      //   constraints: BoxConstraints.tightFor(height: 100),
-      //   child: ,
-      //   color: Colors.black,
-      // )
+      ),
+    ]);
+    // floatingActionButton: Container(
+    //   constraints: BoxConstraints.tightFor(height: 100),
+    //   child: ,
+    //   color: Colors.black,
+    // )
+  }
+
+  Widget getDownloadFloatingActionButton() {
+    return FloatingActionButton(
+      foregroundColor: !complete ? Colors.grey : null,
+      backgroundColor: Color.fromARGB(255, 255, 255, 255),
+      heroTag: "download",
+      tooltip: "Export results",
+      onPressed: !complete
+          ? null
+          : () {
+              if (this.outputCsv == "") {
+                updateSnackBar(
+                    message: "Please click run!",
+                    snackBarType: SnackBarTypes.error);
+                return;
+              }
+              final dataUri = 'data:text/plain;charset=utf-8,$outputCsv';
+              html.document.createElement('a') as html.AnchorElement
+                ..href = dataUri
+                ..download = 'results.csv'
+                ..dispatchEvent(html.Event.eventType('MouseEvent', 'click'));
+            },
+      child: const Icon(
+        Icons.download,
+        size: 40,
+        fill: 1,
+      ),
     );
   }
 
   Widget getInferenceFloatingActionButton() {
     return FloatingActionButton(
-      backgroundColor: Color.fromARGB(255, 255, 255, 255),
+      foregroundColor: images.length == 0 ? Colors.grey : null,
       heroTag: "run",
       tooltip: "Run inference",
-      onPressed: images.length > 0
-          ? () async {
-              ScaffoldMessenger.of(context).removeCurrentSnackBar();
-              const int wordLimit = 15;
-              if (_wallet == null) {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Invalid wallet'),
-                    content: const Text('Please activate your wallet!'),
-                    actions: [
-                      ElevatedButton(
-                          onPressed: () {
-                            Navigator.pop(context);
-                          },
-                          child: const Text('OK'))
-                    ],
-                  ),
-                );
-                return;
-              } else if (_submissionTextController.text == "") {
+      onPressed: () async {
+        ScaffoldMessenger.of(context).removeCurrentSnackBar();
+        if (_wallet == null) {
+          updateSnackBar(
+              message: "Please activate your wallet",
+              snackBarType: SnackBarTypes.error);
+          return;
+        }
+        if (images.length == 0) {
+          updateSnackBar(
+              message: "Please select your images",
+              snackBarType: SnackBarTypes.error);
+          return;
+        }
+
+        outputCsv = "";
+
+        outputCsv += "filename, ";
+
+        for (var question in sentences) {
+          outputCsv += question.string + ", confidence, ";
+        }
+
+        outputCsv += "\n";
+        setState(() {
+          complete = false;
+          progress = 0.1;
+        });
+        for (var image in images) {
+          outputCsv += "${image.name}, ";
+          for (var question in sentences) {
+            try {
+              if (question.string == "" || question.flag == false) {
+                continue;
+              }
+              String dest =
+                  "rstbSTpPcyxMsiXwkBxS9tFTrg2JsDNxWk"; // Dhali's address
+              var openChannels = await _wallet!
+                  .getOpenPaymentChannels(destination_address: dest);
+              String amount;
+              String authAmount; // The amount to authorise for the claim
+              if (openChannels.isNotEmpty) {
+                amount = openChannels.first.amount.toString();
+              } else {
+                amount = (double.parse(_wallet!.balance.value!) * 1000000 ~/ 2)
+                    .toString(); // The total amount escrowed in the channel
+                openChannels = [
+                  await _wallet!.openPaymentChannel(dest, amount)
+                ];
+              }
+              authAmount = amount;
+              Map<String, String> paymentClaim = _wallet!.preparePayment(
+                  destinationAddress: dest,
+                  authAmount: authAmount,
+                  channelId: openChannels[0].channelId);
+
+              Map<String, String> header = {
+                "Payment-Claim": const JsonEncoder().convert(paymentClaim)
+              };
+              String entryPointUrlRoot = _endPoint;
+
+              var request =
+                  http.MultipartRequest("PUT", Uri.parse(entryPointUrlRoot));
+              request.headers.addAll(header);
+
+              var logger = Logger();
+              var input =
+                  '{"image": "${base64Encode(image.bytes!)}", "question": "${question.string}"}';
+              request.files.add(http.MultipartFile(
+                  contentType: MediaType('multipart', 'form-data'),
+                  "input",
+                  Stream.value(input.codeUnits),
+                  input.codeUnits.length,
+                  filename: "input"));
+
+              var finalResponse = await request.send();
+
+              if (finalResponse.headers
+                      .containsKey("dhali-total-requests-charge") &&
+                  finalResponse.headers["dhali-total-requests-charge"] !=
+                      null) {
+                dhaliDebit =
+                    finalResponse.headers["dhali-total-requests-charge"]!;
+              }
+
+              logger.d("Status: ${finalResponse.statusCode}");
+              var response =
+                  json.decode(await finalResponse.stream.bytesToString());
+              if (finalResponse.statusCode == 200) {
+                print(response["results"]);
+                outputCsv += (response["results"][0]["answer"] + ", ");
+                outputCsv +=
+                    ((response["results"][0]["score"] as double).toString() +
+                        ", ");
+              } else {
                 updateSnackBar(
-                    message: "You must provide an input",
+                    message: response.toString(),
                     snackBarType: SnackBarTypes.error);
-                return;
+                outputCsv += ("ERROR, 0, ");
               }
-
-              updateSnackBar(snackBarType: SnackBarTypes.inProgress);
-              try {
-                List<String> sentences =
-                    _submissionTextController.text.split(".");
-                List<double> audioSamples = [];
-                bool successful = true;
-                for (String sentence in sentences) {
-                  if (sentence == "") {
-                    continue;
-                  }
-                  String dest =
-                      "rstbSTpPcyxMsiXwkBxS9tFTrg2JsDNxWk"; // Dhali's address
-                  var openChannels = await _wallet!
-                      .getOpenPaymentChannels(destination_address: dest);
-                  String amount;
-                  String authAmount; // The amount to authorise for the claim
-                  if (openChannels.isNotEmpty) {
-                    amount = openChannels.first.amount.toString();
-                  } else {
-                    amount = (double.parse(_wallet!.balance.value!) *
-                            1000000 ~/
-                            2)
-                        .toString(); // The total amount escrowed in the channel
-                    openChannels = [
-                      await _wallet!.openPaymentChannel(dest, amount)
-                    ];
-                  }
-                  authAmount = amount;
-                  Map<String, String> paymentClaim = {
-                    "account": _wallet!.address,
-                    "destination_account": dest,
-                    "authorized_to_claim": authAmount,
-                    "signature": _wallet!
-                        .sendDrops(authAmount, openChannels[0].channelId),
-                    "channel_id": openChannels[0].channelId
-                  };
-                  Map<String, String> header = {
-                    "Payment-Claim": const JsonEncoder().convert(paymentClaim)
-                  };
-                  String entryPointUrlRoot = _endPoint;
-
-                  var request = http.MultipartRequest(
-                      "PUT", Uri.parse(entryPointUrlRoot));
-                  request.headers.addAll(header);
-
-                  var logger = Logger();
-                  var input =
-                      '{"image": "${base64Encode(images[0])}", "question": "$sentence."}';
-                  request.files.add(http.MultipartFile(
-                      contentType: MediaType('multipart', 'form-data'),
-                      "input",
-                      Stream.value(input.codeUnits),
-                      input.codeUnits.length,
-                      filename: "input"));
-
-                  var finalResponse = await request.send();
-
-                  if (finalResponse.headers
-                          .containsKey("dhali-total-requests-charge") &&
-                      finalResponse.headers["dhali-total-requests-charge"] !=
-                          null) {
-                    dhaliDebit =
-                        finalResponse.headers["dhali-total-requests-charge"]!;
-                  }
-
-                  logger.d("Status: ${finalResponse.statusCode}");
-                  var response =
-                      json.decode(await finalResponse.stream.bytesToString());
-                  if (finalResponse.statusCode == 200) {
-                    setState(() {
-                      print(response["results"]);
-                      answer = response["results"][0]["answer"];
-                      confidence = (response["results"][0]["score"] as double)
-                          .toString();
-                    });
-                  } else {
-                    updateSnackBar(
-                        message: response.toString(),
-                        snackBarType: SnackBarTypes.error);
-                    throw Exception(
-                        "Your text could not be converted successfully");
-                  }
-                }
-
-                updateSnackBar(snackBarType: SnackBarTypes.success);
-              } catch (e) {
-                updateSnackBar(snackBarType: SnackBarTypes.error);
-              } finally {
-                Future.delayed(const Duration(milliseconds: 1000), () {
-                  setState(() {
-                    updateSnackBar();
-                  });
-                });
-              }
+            } catch (e) {
+              outputCsv += ("ERROR, 0, ");
             }
-          : null,
+            setState(() {
+              progress += 1;
+            });
+          }
+          outputCsv += "\n";
+        }
+
+        setState(() {
+          complete = true;
+        });
+
+        updateSnackBar(snackBarType: SnackBarTypes.success);
+      },
       child: const Icon(
         Icons.play_arrow,
         size: 40,
@@ -488,29 +530,8 @@ class TextInputScreenState extends State<TextInputScreen> {
         updateSnackBar(
             message: "This app currently uses the test XRP leger.",
             snackBarType: SnackBarTypes.error);
-        if (_wallet == null) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-                builder: (context) => WalletHomeScreen(
-                      title: "wallet",
-                      getWallet: () {
-                        return _wallet;
-                      },
-                      setWallet: (XRPLWallet wallet) {
-                        setState(() {
-                          _wallet = wallet;
-                        });
-                        Navigator.pop(context);
-                      },
-                    )),
-          );
-        }
-        if (mnemonic != null) {
-          setState(() {
-            _wallet = XRPLWallet(mnemonic!, testMode: true);
-          });
-        }
+
+        getScreenView(DrawerIndex.Wallet);
       },
       label: Text(
         text,
@@ -600,17 +621,13 @@ class TextInputScreenState extends State<TextInputScreen> {
     );
   }
 
-  Widget getWalletScaffold() {
-    return Scaffold(
-        floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-        body: Column(children: [
-          Spacer(flex: 1),
-          Expanded(child: getHeader(), flex: 3),
-          Spacer(flex: 10),
-          Expanded(
-              child: getAnimatedText('Please activate your wallet'), flex: 10),
-        ]),
-        floatingActionButton: getWalletFloatingActionButton("Activate wallet"));
+  Widget getWalletScaffoldBody() {
+    return Column(children: [
+      const Spacer(flex: 1),
+      Expanded(child: getHeader(), flex: 3),
+      const Spacer(flex: 10),
+      Expanded(child: getAnimatedText('Please activate your wallet'), flex: 10),
+    ]);
   }
 
   void updateSnackBar({String? message, SnackBarTypes? snackBarType}) {
@@ -621,13 +638,13 @@ class TextInputScreenState extends State<TextInputScreen> {
         content: Text(message == null
             ? 'An unknown error occured. Please wait 30 seconds and try again.'
             : message),
-        duration: const Duration(seconds: 10),
+        duration: const Duration(seconds: 3),
       );
     } else if (snackBarType == SnackBarTypes.inProgress) {
       snackbar = const SnackBar(
         backgroundColor: Colors.blue,
         content: Text('Inference in progress. Please wait...'),
-        duration: Duration(days: 365),
+        duration: Duration(seconds: 3),
       );
     } else if (snackBarType == SnackBarTypes.success) {
       snackbar = const SnackBar(
@@ -639,7 +656,82 @@ class TextInputScreenState extends State<TextInputScreen> {
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
       return;
     }
-
     ScaffoldMessenger.of(context).showSnackBar(snackbar);
+  }
+
+  void activateWallet() {
+    setState(() {
+      _showContinueButton = true;
+    });
+  }
+
+  void switchToProductView() {
+    setState(() {
+      this.drawerIndex = DrawerIndex.Product;
+      if (_wallet != null) {
+        screenView = getInferenceScaffoldBody();
+      } else {
+        screenView = null;
+      }
+      _showContinueButton = false;
+    });
+  }
+
+  Widget? getScreenView(drawerIndex) {
+    Future(() => ScaffoldMessenger.of(context).hideCurrentSnackBar());
+
+    switch (drawerIndex) {
+      case DrawerIndex.Wallet:
+        setState(() {
+          this.drawerIndex = drawerIndex;
+          SnackBar snackbar;
+          snackbar = const SnackBar(
+            backgroundColor: Colors.red,
+            content:
+                Text("Dhali is currently in alpha and uses test XRP only!"),
+            duration: Duration(days: 1),
+          );
+
+          Future(() => ScaffoldMessenger.of(context).showSnackBar(snackbar));
+
+          screenView = Scaffold(
+            body: Stack(
+              children: [
+                WalletHomeScreen(
+                  title: "wallet",
+                  buttonsColor: Colors.blue,
+                  bodyTextColor: Colors.white,
+                  getWallet: () {
+                    return _wallet;
+                  },
+                  setWallet: (DhaliWallet wallet) {
+                    _wallet = wallet;
+                  },
+                  onActivation: activateWallet,
+                ),
+                if (_showContinueButton)
+                  Positioned(
+                    bottom: 100,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: FloatingActionButton.extended(
+                        label: Text('Continue'),
+                        onPressed: switchToProductView,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        });
+        break;
+      case DrawerIndex.Product:
+        switchToProductView();
+        break;
+      default:
+        break;
+    }
+    return screenView;
   }
 }

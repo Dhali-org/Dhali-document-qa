@@ -1,5 +1,9 @@
 {
   "projects": {
-    "default": "dhali-prod"
-  }
+    "default": "kernml",
+    "staging": "kernml",
+    "prod": "dhali-prod"
+  },
+  "targets": {},
+  "etags": {}
 }
