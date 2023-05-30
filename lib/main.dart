@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:html' as html;
+import 'dart:io';
 import 'dart:js' as js;
 import 'dart:typed_data';
 import 'dart:ui';
@@ -87,7 +88,8 @@ class TextInputScreenState extends State<TextInputScreen> {
   String answer = "";
   String confidence = "";
   String outputCsv = "";
-  bool complete = false;
+  bool complete = true;
+  bool errored = false;
   Widget? screenView;
   DrawerIndex? drawerIndex;
   double? _costPerRun;
@@ -309,11 +311,18 @@ class TextInputScreenState extends State<TextInputScreen> {
           Container(
             width: MediaQuery.of(context).size.width / 10,
           ),
-          const Text(
-            "3. Run",
-            textAlign: TextAlign.center,
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
-          ),
+          !complete
+              ? const Text(
+                  "3. Running  ",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
+                )
+              : const Text(
+                  "3. Run",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
+                ),
+          !complete ? CircularProgressIndicator() : SizedBox.shrink()
         ],
       ),
       SizedBox(height: 20),
@@ -533,6 +542,7 @@ class TextInputScreenState extends State<TextInputScreen> {
       heroTag: "run",
       tooltip: "Run inference",
       onPressed: () async {
+        errored = false;
         ScaffoldMessenger.of(context).removeCurrentSnackBar();
         if (_wallet == null) {
           updateSnackBar(
@@ -540,7 +550,7 @@ class TextInputScreenState extends State<TextInputScreen> {
               snackBarType: SnackBarTypes.error);
           return;
         }
-        if (_wallet!.balance.value == null) {
+        if (_wallet!.balance.value == null || _costPerRun == null) {
           updateSnackBar(
               message:
                   "Your wallet's balance is updating. Please wait a moment",
@@ -563,42 +573,131 @@ class TextInputScreenState extends State<TextInputScreen> {
         }
 
         outputCsv += "\n";
-        setState(() {
-          complete = false;
-          progress = 0.1;
-        });
-        for (var image in images) {
-          outputCsv += "${image.name}, ";
-          for (var question in sentences) {
-            var logger = Logger();
-            try {
+
+        var logger = Logger();
+        try {
+          String dest = "rstbSTpPcyxMsiXwkBxS9tFTrg2JsDNxWk"; // Dhali's address
+          var openChannels =
+              await _wallet!.getOpenPaymentChannels(destination_address: dest);
+
+          double totalAmountRequired =
+              (_costPerRun! * images.length * sentences.length * 1.4);
+
+          double amountNeeded = (totalAmountRequired / 1000000 -
+              double.parse(_wallet!.balance.value!));
+
+          bool? willFundDhaliBalance;
+          if (mounted &&
+              double.parse(_wallet!.balance.value!) < totalAmountRequired) {
+            willFundDhaliBalance = await showDialog<bool?>(
+                context: context,
+                builder: (context) {
+                  return AlertDialog(
+                    title: Text(
+                        'Fund my Dhali balance with ${(totalAmountRequired / 1000000).toStringAsFixed(3)} XRP'),
+                    content: Text(
+                        'To run this, you must have at least ${(totalAmountRequired / 1000000).toStringAsFixed(3)} XRP in '
+                        'your Dhali balance. \n\nYou must add '
+                        '${amountNeeded.toStringAsFixed(3)}'),
+                    actions: [
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pop(context, true);
+                        },
+                        child: const Text("Yes"),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pop(context, false);
+                        },
+                        child: const Text("No"),
+                      ),
+                    ],
+                  );
+                });
+            if (willFundDhaliBalance != true) {
+              return;
+            }
+            updateSnackBar(
+                message: "Processing your request",
+                snackBarType: SnackBarTypes.inProgress);
+            if (openChannels.length == 0) {
+              openChannels = [
+                await _wallet!.openPaymentChannel(
+                    dest, totalAmountRequired.ceil().toString())
+              ];
+            } else {
+              _wallet!.fundPaymentChannel(
+                  openChannels[0], '${amountNeeded.ceil().toString()}');
+            }
+          } else if (double.parse(_wallet!.balance.value!) >=
+              totalAmountRequired) {
+          } else {
+            updateSnackBar(
+                message: "An error occured when funding your Dhali balance",
+                snackBarType: SnackBarTypes.error);
+            return;
+          }
+
+          if (openChannels.isNotEmpty) {
+          } else {
+            updateSnackBar(
+                message: "Please select your images",
+                snackBarType: SnackBarTypes.error);
+          }
+
+          bool? willFundDhaliRequest;
+          Map<String, String> paymentClaim;
+          if (mounted) {
+            willFundDhaliRequest = await showDialog<bool?>(
+                context: context,
+                builder: (context) {
+                  return AlertDialog(
+                    title: const Text('Continue?'),
+                    content: Text(
+                        'This request will cost upto ${(totalAmountRequired / 1000000).toStringAsFixed(3)} XRP'),
+                    actions: [
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pop(context, true);
+                        },
+                        child: const Text("Yes"),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pop(context, false);
+                        },
+                        child: const Text("No"),
+                      ),
+                    ],
+                  );
+                });
+            if (willFundDhaliRequest != true) {
+              return;
+            }
+            paymentClaim = await _wallet!.preparePayment(
+                destinationAddress: dest,
+                authAmount: totalAmountRequired.ceil().toString(),
+                channelDescriptor: openChannels[0]);
+          } else {
+            updateSnackBar(
+                message: "An error occured", snackBarType: SnackBarTypes.error);
+            return;
+          }
+          setState(() {
+            complete = false;
+            progress = 0.1;
+          });
+          Map<String, String> header = {
+            "Payment-Claim": const JsonEncoder().convert(paymentClaim)
+          };
+          for (var image in images) {
+            outputCsv += "${image.name}, ";
+            for (var question in sentences) {
               if (question.string == "" || question.flag == false) {
                 continue;
               }
-              String dest =
-                  "rstbSTpPcyxMsiXwkBxS9tFTrg2JsDNxWk"; // Dhali's address
-              var openChannels = await _wallet!
-                  .getOpenPaymentChannels(destination_address: dest);
-              String amount;
-              String authAmount; // The amount to authorise for the claim
-              if (openChannels.isNotEmpty) {
-                amount = openChannels.first.amount.toString();
-              } else {
-                amount = (double.parse(_wallet!.balance.value!) * 1000000 ~/ 2)
-                    .toString(); // The total amount escrowed in the channel
-                openChannels = [
-                  await _wallet!.openPaymentChannel(dest, amount)
-                ];
-              }
-              authAmount = amount;
-              Map<String, String> paymentClaim = _wallet!.preparePayment(
-                  destinationAddress: dest,
-                  authAmount: authAmount,
-                  channelId: openChannels[0].channelId);
 
-              Map<String, String> header = {
-                "Payment-Claim": const JsonEncoder().convert(paymentClaim)
-              };
               String entryPointUrlRoot = _endPoint;
 
               var request =
@@ -639,28 +738,39 @@ class TextInputScreenState extends State<TextInputScreen> {
                 outputCsv += ("$answer, ");
                 outputCsv += ("$confidence, ");
               } else {
+                errored = true;
                 logger.d("Response code", finalResponse.statusCode);
                 updateSnackBar(
                     message: response.toString(),
                     snackBarType: SnackBarTypes.error);
-                outputCsv += ("ERROR, 0, ");
+                if (finalResponse.statusCode == 402) {
+                  outputCsv += ("ERROR: insufficient funds, 0, ");
+                  throw const HttpException("Insufficient funds");
+                } else {
+                  outputCsv += ("ERROR, 0, ");
+                  throw HttpException(
+                      "An ${finalResponse.statusCode} error occured");
+                }
               }
-            } catch (e) {
-              logger.d("Error", e.toString());
-              outputCsv += ("ERROR, 0, ");
+              setState(() {
+                progress += 1;
+              });
             }
-            setState(() {
-              progress += 1;
-            });
+            outputCsv += "\n";
           }
-          outputCsv += "\n";
+        } catch (e) {
+          errored = true;
+          logger.d("Error", e.toString());
+          updateSnackBar(
+              message: e.toString(), snackBarType: SnackBarTypes.error);
         }
 
         setState(() {
           complete = true;
         });
-
-        updateSnackBar(snackBarType: SnackBarTypes.success);
+        if (errored == false) {
+          updateSnackBar(snackBarType: SnackBarTypes.success);
+        }
       },
       child: const Icon(
         Icons.play_arrow,
@@ -790,9 +900,11 @@ class TextInputScreenState extends State<TextInputScreen> {
         duration: const Duration(seconds: 3),
       );
     } else if (snackBarType == SnackBarTypes.inProgress) {
-      snackbar = const SnackBar(
+      snackbar = SnackBar(
         backgroundColor: Colors.blue,
-        content: Text('Inference in progress. Please wait...'),
+        content: Text(message != null
+            ? message
+            : 'Inference in progress. Please wait...'),
         duration: Duration(seconds: 3),
       );
     } else if (snackBarType == SnackBarTypes.success) {
@@ -853,7 +965,7 @@ class TextInputScreenState extends State<TextInputScreen> {
                   getWallet: () {
                     return _wallet;
                   },
-                  setWallet: (DhaliWallet wallet) {
+                  setWallet: (DhaliWallet? wallet) {
                     _wallet = wallet;
                   },
                   onActivation: activateWallet,
