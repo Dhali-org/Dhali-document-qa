@@ -12,6 +12,7 @@ import 'package:consumer_application/accents_dropdown.dart';
 import 'package:consumer_application/download_file_widget.dart';
 import 'package:consumer_application/sentence_list_widget.dart';
 import 'package:dhali_wallet/dhali_wallet_widget.dart';
+import 'package:uuid/uuid.dart';
 import 'firebase_options.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:file_picker/file_picker.dart';
@@ -580,7 +581,23 @@ class TextInputScreenState extends State<TextInputScreen> {
           var openChannels =
               await _wallet!.getOpenPaymentChannels(destination_address: dest);
 
-          double totalAmountRequired =
+          double to_claim = 0;
+          if (openChannels.isNotEmpty) {
+            var doc_id =
+                Uuid().v5(Uuid.NAMESPACE_URL, openChannels[0].channelId);
+
+            var to_claim_doc = await widget
+                .getFirestore()
+                .collection("public_claim_info")
+                .doc(doc_id)
+                .get();
+
+            to_claim = to_claim_doc.exists
+                ? to_claim_doc.data()!["to_claim"] as double
+                : 0;
+          }
+
+          double totalAmountRequired = to_claim +
               (_costPerRun! * images.length * sentences.length * 1.4);
 
           double amountNeeded = (totalAmountRequired / 1000000 -
