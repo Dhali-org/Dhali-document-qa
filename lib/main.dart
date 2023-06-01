@@ -79,9 +79,10 @@ class TextInputScreen extends StatefulWidget {
 
 class TextInputScreenState extends State<TextInputScreen> {
   List<Pair<String, bool>> sentences = [
-    Pair("What is the title?", true),
+    Pair("Who is the supplier?", true),
+    Pair("What is the invoice number?", true),
     Pair("What is the total cost?", true),
-    Pair("What is the reference number?", true)
+    Pair("When is the payment due?", true)
   ];
   static const String uuid = 'd14a01e78-cced-470d-915a-64d194c1c830';
   String dhaliDebit = "0";
