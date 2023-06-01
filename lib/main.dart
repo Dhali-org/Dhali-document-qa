@@ -747,13 +747,11 @@ class TextInputScreenState extends State<TextInputScreen> {
                 String answer = (response["results"][0]["answer"] as String);
                 double confidence = (response["results"][0]["score"] as double);
 
-                answer = answer.replaceAll(",", ";");
-
                 logger.d("Answer", answer);
                 logger.d("Confidence", confidence);
 
-                outputCsv += ("$answer, ");
-                outputCsv += ("$confidence, ");
+                outputCsv += ("\"$answer\", ");
+                outputCsv += ("\"$confidence\", ");
               } else {
                 errored = true;
                 logger.d("Response code", finalResponse.statusCode);
