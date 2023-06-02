@@ -621,15 +621,15 @@ class TextInputScreenState extends State<TextInputScreen> {
                     actions: [
                       TextButton(
                         onPressed: () {
-                          Navigator.pop(context, true);
-                        },
-                        child: const Text("Yes"),
-                      ),
-                      TextButton(
-                        onPressed: () {
                           Navigator.pop(context, false);
                         },
                         child: const Text("No"),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pop(context, true);
+                        },
+                        child: const Text("Yes"),
                       ),
                     ],
                   );
@@ -678,15 +678,15 @@ class TextInputScreenState extends State<TextInputScreen> {
                     actions: [
                       TextButton(
                         onPressed: () {
-                          Navigator.pop(context, true);
-                        },
-                        child: const Text("Yes"),
-                      ),
-                      TextButton(
-                        onPressed: () {
                           Navigator.pop(context, false);
                         },
                         child: const Text("No"),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pop(context, true);
+                        },
+                        child: const Text("Yes"),
                       ),
                     ],
                   );
