@@ -29,7 +29,7 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
-  xrpl: ^0.0.6
+  xrpl: ^0.0.9
   badges: ^3.0.3
   flutter:
     sdk: flutter
