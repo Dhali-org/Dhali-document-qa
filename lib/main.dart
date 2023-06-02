@@ -598,25 +598,26 @@ class TextInputScreenState extends State<TextInputScreen> {
                 : 0;
           }
 
-          double totalAmountRequired = to_claim +
+          double totalAmountRequiredInChannel = to_claim +
               (_costPerRun! * images.length * sentences.length * 1.4);
 
-          double amountNeeded = (totalAmountRequired / 1000000 -
+          double amountNeeded = (totalAmountRequiredInChannel -
               double.parse(_wallet!.balance.value!));
 
           bool? willFundDhaliBalance;
           if (mounted &&
-              double.parse(_wallet!.balance.value!) < totalAmountRequired) {
+              double.parse(_wallet!.balance.value!) <
+                  totalAmountRequiredInChannel) {
             willFundDhaliBalance = await showDialog<bool?>(
                 context: context,
                 builder: (context) {
                   return AlertDialog(
                     title: Text(
-                        'Fund my Dhali balance with ${(totalAmountRequired / 1000000).toStringAsFixed(3)} XRP'),
+                        'Fund my Dhali balance with ${(totalAmountRequiredInChannel / 1000000).toStringAsFixed(3)} XRP'),
                     content: Text(
-                        'To run this, you must have at least ${(totalAmountRequired / 1000000).toStringAsFixed(3)} XRP in '
+                        'To run this, you must have at least ${(totalAmountRequiredInChannel / 1000000).toStringAsFixed(3)} XRP in '
                         'your Dhali balance. \n\nYou must add '
-                        '${amountNeeded.toStringAsFixed(3)}'),
+                        '${(amountNeeded / 1000000).toStringAsFixed(3)} XRP'),
                     actions: [
                       TextButton(
                         onPressed: () {
@@ -642,14 +643,14 @@ class TextInputScreenState extends State<TextInputScreen> {
             if (openChannels.length == 0) {
               openChannels = [
                 await _wallet!.openPaymentChannel(
-                    dest, totalAmountRequired.ceil().toString())
+                    dest, totalAmountRequiredInChannel.ceil().toString())
               ];
             } else {
               _wallet!.fundPaymentChannel(
                   openChannels[0], '${amountNeeded.ceil().toString()}');
             }
           } else if (double.parse(_wallet!.balance.value!) >=
-              totalAmountRequired) {
+              totalAmountRequiredInChannel) {
           } else {
             updateSnackBar(
                 message: "An error occured when funding your Dhali balance",
@@ -660,7 +661,7 @@ class TextInputScreenState extends State<TextInputScreen> {
           if (openChannels.isNotEmpty) {
           } else {
             updateSnackBar(
-                message: "Please select your images",
+                message: "Your Dhali balance is 0",
                 snackBarType: SnackBarTypes.error);
           }
 
@@ -672,8 +673,8 @@ class TextInputScreenState extends State<TextInputScreen> {
                 builder: (context) {
                   return AlertDialog(
                     title: const Text('Continue?'),
-                    content: Text(
-                        'This request will cost upto ${(totalAmountRequired / 1000000).toStringAsFixed(3)} XRP'),
+                    content: Text('Including any previous request, '
+                        'this request will cost upto ${(totalAmountRequiredInChannel / 1000000).toStringAsFixed(3)} XRP'),
                     actions: [
                       TextButton(
                         onPressed: () {
@@ -695,7 +696,7 @@ class TextInputScreenState extends State<TextInputScreen> {
             }
             paymentClaim = await _wallet!.preparePayment(
                 destinationAddress: dest,
-                authAmount: totalAmountRequired.ceil().toString(),
+                authAmount: totalAmountRequiredInChannel.ceil().toString(),
                 channelDescriptor: openChannels[0]);
           } else {
             updateSnackBar(
