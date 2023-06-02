@@ -29,7 +29,7 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
-  xrpl: ^0.0.6
+  xrpl: ^0.0.9
   badges: ^3.0.3
   flutter:
     sdk: flutter
@@ -51,7 +51,7 @@ dependencies:
   dhali_wallet:
     git:
       url: "https://github.com/Dhali-org/Dhali-wallet.git"
-      ref: 0.0.11
+      ref: 0.0.12
   uuid: ^3.0.7
 
   # The following adds the Cupertino Icons font to your application.
