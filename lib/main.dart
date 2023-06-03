@@ -365,7 +365,7 @@ class TextInputScreenState extends State<TextInputScreen> {
                                 snapshot.data!.data()!["cost_per_ms"] as double;
                             return Center(
                                 child: Text(
-                                    "${(_costPerRun! / 1000000).toStringAsFixed(3)} XRP",
+                                    "${(_costPerRun! / 1000000).toStringAsFixed(4)} XRP",
                                     style: TextStyle(
                                         fontSize: 18,
                                         fontWeight: FontWeight.bold)));
@@ -430,7 +430,7 @@ class TextInputScreenState extends State<TextInputScreen> {
                                                 sentences.length *
                                                 _costPerRun! /
                                                 1000000)
-                                            .toStringAsFixed(3) +
+                                            .toStringAsFixed(4) +
                                         " XRP",
                                     style: TextStyle(
                                         fontSize: 18,
@@ -613,11 +613,11 @@ class TextInputScreenState extends State<TextInputScreen> {
                 builder: (context) {
                   return AlertDialog(
                     title: Text(
-                        'Fund my Dhali balance with ${(totalAmountRequiredInChannel / 1000000).toStringAsFixed(3)} XRP'),
+                        'Fund my Dhali balance with ${(amountNeeded / 1000000).toStringAsFixed(4)} XRP'),
                     content: Text(
-                        'To run this, you must have at least ${(totalAmountRequiredInChannel / 1000000).toStringAsFixed(3)} XRP in '
+                        'To run this, you must have at least ${(totalAmountRequiredInChannel / 1000000).toStringAsFixed(4)} XRP in '
                         'your Dhali balance. \n\nYou must add '
-                        '${(amountNeeded / 1000000).toStringAsFixed(3)} XRP'),
+                        '${(amountNeeded / 1000000).toStringAsFixed(4)} XRP'),
                     actions: [
                       TextButton(
                         onPressed: () {
@@ -674,7 +674,7 @@ class TextInputScreenState extends State<TextInputScreen> {
                   return AlertDialog(
                     title: const Text('Continue?'),
                     content: Text('Including any previous request, '
-                        'this request will cost upto ${(totalAmountRequiredInChannel / 1000000).toStringAsFixed(3)} XRP'),
+                        'this request will cost upto ${(totalAmountRequiredInChannel / 1000000).toStringAsFixed(4)} XRP'),
                     actions: [
                       TextButton(
                         onPressed: () {
