@@ -99,8 +99,12 @@ class TextInputScreenState extends State<TextInputScreen> {
   List<PlatformFile> images = [];
   DhaliWallet? _wallet;
   bool hideMnemonic = true;
-  final String _endPoint =
-      "https://dhali-prod-run-dauenf0n.uc.gateway.dev/${uuid}/run";
+
+  static const String _endPointBase =
+      "https://dhali-prod-run-dauenf0n.uc.gateway.dev/${uuid}";
+  final String _endPoint = "$_endPointBase/run";
+  final String _endPointWarmup = "$_endPointBase/warmup";
+
   Client client = Client('wss://s.altnet.rippletest.net:51233');
   ValueNotifier<String?> balance = ValueNotifier(null);
   bool _showContinueButton = false;
@@ -116,6 +120,9 @@ class TextInputScreenState extends State<TextInputScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Warmup the doc QA endpoint
+    http.get(Uri.parse(_endPointWarmup));
+
     return Scaffold(
       appBar: AppBar(),
       drawer: Drawer(
