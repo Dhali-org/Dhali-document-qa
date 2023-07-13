@@ -51,7 +51,7 @@ dependencies:
   dhali_wallet:
     git:
       url: "https://github.com/Dhali-org/Dhali-wallet.git"
-      ref: 0.0.13
+      ref: 0.0.18
   uuid: ^3.0.7
 
   # The following adds the Cupertino Icons font to your application.
